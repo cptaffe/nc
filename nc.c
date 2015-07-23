@@ -1,6 +1,4 @@
 
-#include <stdio.h>
-
 // Netcat utility
 // Written with no standard library,
 // for Linux only.
@@ -70,7 +68,7 @@ Socket newSocket(SocketDomain domain, SocketType type) {
 	return -1;
 }
 
-int main() {
+int _start() {
 	char buf[] = "hello\n";
 	SysCall(kSysCallWrite, (long long int[]){1, (long long int) buf, sizeof(buf) - 1, 0, 0, 0});
 	SysCall(kSysCallExit, (long long int[]){1, 0, 0, 0, 0, 0});
