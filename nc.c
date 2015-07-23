@@ -8,9 +8,6 @@
 
 static int _syscall(int call, long long int p[const static 6]) {
      long long int ret;
-
-	 printf("%d: %lld, %lld, %lld, %lld, %lld, %lld\n", call, p[0], p[1], p[2], p[3], p[4], p[5]);
-
      asm(
             // work around for lack of constraints for
             // r8, r9, and r10
