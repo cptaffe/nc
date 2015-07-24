@@ -9,8 +9,8 @@ enum {
 };
 
 typedef struct {
-    char *buf;
-    u64 size;
+	char *buf;
+	u64 size;
 	u64 len;
 } string;
 
@@ -19,26 +19,26 @@ string *makeString(string *str, char buf[], u64 size) {
 	// Sanity checks
 	// NOTE: nil buffers are allowed if the size is 0.
 	// nil strings are not allowed.
-    if (str == nil || (buf == nil && size != 0)) return nil;
+	if (str == nil || (buf == nil && size != 0)) return nil;
 
 	zeroMem(str, sizeof(string));
-    str->buf = buf;
-    str->size = size;
+	str->buf = buf;
+	str->size = size;
 }
 
 // Sanity checks, allows every method to return nil on error.
 static bool _stringOk(string *str) {
-    return str != nil && str->len < str->size;
+	return str != nil && str->len < str->size;
 }
 
 // Appends a character to a string if there is room.
 string *appendString(string *str, char toAppend) {
-    if (!_stringOk(str)) return nil;
-    if (str->len < str->size) {
-        str->buf[str->len] = toAppend;
-        str->len++;
-    }
-    return str;
+	if (!_stringOk(str)) return nil;
+	if (str->len < str->size) {
+		str->buf[str->len] = toAppend;
+		str->len++;
+	}
+	return str;
 }
 
 inline u64 lenString(string *str) {
@@ -84,14 +84,14 @@ string *numAsString(string *str, u64 num, int base) {
 }
 
 string *clearString(string *str) {
-    if (!_stringOk(str)) return nil;
-    str->len = 0;
-    return str;
+	if (!_stringOk(str)) return nil;
+	str->len = 0;
+	return str;
 }
 
 string *writeString(string *str, int fd) {
-    if (!_stringOk(str)) return nil;
-    if (str->len > 0) {
-        syscall(kSyscallWrite, (u64[]){fd, (u64) str->buf, str->len, 0, 0, 0});
-    }
+	if (!_stringOk(str)) return nil;
+	if (str->len > 0) {
+		syscall(kSyscallWrite, (u64[]){fd, (u64) str->buf, str->len, 0, 0, 0});
+	}
 }
