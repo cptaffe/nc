@@ -146,39 +146,38 @@ typedef struct {
 	int size;
 } IntHeap;
 
-void swapIntHeap(void *h, int i, int j) {
-	IntHeap *heap = (IntHeap *) h;
-	int b = heap->array[i];
-	heap->array[i] = heap->array[j];
-	heap->array[j] = b;
+void swapIntHeap(void *v, int i, int j) {
+	IntHeap *h = ((IntHeap *) v);
+	int b = h->array[i];
+	h->array[i] = h->array[j];
+	h->array[j] = b;
 }
 
-int lenIntHeap(void *h) {
-	IntHeap *heap = (IntHeap *) h;
-	return heap->size;
+int lenIntHeap(void *v) {
+	return ((IntHeap *) v)->size;
 }
 
-bool lessIntHeap(void *h, int i, int j) {
-	IntHeap *heap = (IntHeap *) h;
-	return heap->array[i] < heap->array[j];
+bool lessIntHeap(void *v, int i, int j) {
+	IntHeap *h = ((IntHeap *) v);
+	return h->array[i] < h->array[j];
 }
 
-void pushIntHeap(void *h, void *x) {
-	IntHeap *heap = (IntHeap *) h;
-	heap->array[heap->size] = (int) (u64) x;
-	heap->size++;
+void pushIntHeap(void *v, void *x) {
+	IntHeap *h = ((IntHeap *) v);
+	h->array[h->size] = (int) (u64) x;
+	h->size++;
 }
 
-void *popIntHeap(void *h) {
-	IntHeap *heap = (IntHeap *) h;
-	heap->size--;
-	return (void *) (u64) heap->array[heap->size];
+void *popIntHeap(void *v) {
+	IntHeap *h = ((IntHeap *) v);
+	h->size--;
+	return (void *) (u64) h->array[h->size];
 }
 
-Heap asHeapIntHeap(IntHeap *ch, Heap *h) {
+Heap asHeapIntHeap(IntHeap h) {
 	// Fill in Heap interface
 	return (Heap){
-		.heap = ch,
+		.heap = &h,
 		.i = (Heapable){
 			.sort = (Sortable){
 				.len  = lenIntHeap,
@@ -192,22 +191,15 @@ Heap asHeapIntHeap(IntHeap *ch, Heap *h) {
 }
 
 void _start() {
-	Heap h = asHeapIntHeap(&(IntHeap){
+	Heap h = asHeapIntHeap((IntHeap){
 		.array = {1, 5, 2, 8},
 		.size  = 4
-	}, &h);
-
+	});
 	initHeap(&h);
 	pushHeap(&h, (void *) (u64) 7);
 
 	while (lenIntHeap(h.heap) > 0) {
-		char tst[] = "x\n";
-		tst[0] = '0' + (int) (u64) popHeap(&h);
-		writeString((string){
-			.buf  = tst,
-			.size = sizeof tst,
-			.len  = 2
-		}, 1);
+		printNum((int) (u64) popHeap(&h), 10);
 	}
 
 	syscall(kSyscallExit, (u64[]){1, 0, 0, 0, 0, 0});
