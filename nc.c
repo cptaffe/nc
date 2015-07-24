@@ -107,7 +107,7 @@ Sock *connectSock(Sock *sock, SockAddr *addr, u64 len) {
 void printNum(u64 num, int base) {
 	char buf[256];
 	// If buffer is too short, memBitString returns nil
-	writeString(appendString(numAsString(&(string){
+	writeString(appendString(numAsString((string){
 		.buf  = buf,
 		.size = sizeof buf,
 	}, num, base), '\n'), 1);
@@ -128,14 +128,14 @@ void hexDump(void *mem, u64 size) {
 
 	int i;
 	for (i = 0; i < big; i++) {
-		appendString(numAsString(&str, ((u64*)mem)[i], 16), '.');
+		appendString(numAsString(str, ((u64*)mem)[i], 16), '.');
 	}
 
 	for (i = 0; i < bytes; i++) {
-		numAsString(&str, ((u8*)&((u64*)mem)[big])[i], 16);
+		numAsString(str, ((u8*)&((u64*)mem)[big])[i], 16);
 	}
 
-	writeString(appendString(&str, '\n'), 1);
+	writeString(appendString(str, '\n'), 1);
 }
 
 // Implement example IntHeap with heap.c
@@ -175,9 +175,9 @@ void *popIntHeap(void *h) {
 	return (void *) (u64) heap->array[heap->size];
 }
 
-void asHeapIntHeap(IntHeap *ch, Heap *h) {
+Heap asHeapIntHeap(IntHeap *ch, Heap *h) {
 	// Fill in Heap interface
-	*h = (Heap){
+	return (Heap){
 		.heap = ch,
 		.i = (Heapable){
 			.sort = (Sortable){
@@ -192,20 +192,18 @@ void asHeapIntHeap(IntHeap *ch, Heap *h) {
 }
 
 void _start() {
-	IntHeap ch = {
+	Heap h = asHeapIntHeap(&(IntHeap){
 		.array = {1, 5, 2, 8},
 		.size  = 4
-	};
-	Heap h;
-	asHeapIntHeap(&ch, &h);
+	}, &h);
 
 	initHeap(&h);
 	pushHeap(&h, (void *) (u64) 7);
 
-	while (lenIntHeap(&ch) > 0) {
+	while (lenIntHeap(h.heap) > 0) {
 		char tst[] = "x\n";
 		tst[0] = '0' + (int) (u64) popHeap(&h);
-		writeString(&(string){
+		writeString((string){
 			.buf  = tst,
 			.size = sizeof tst,
 			.len  = 2
