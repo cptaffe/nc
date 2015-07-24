@@ -1,9 +1,11 @@
 
 #include "def.h"
-// Syscall, Mem depends on def.h
+#include "heap.c"
+// Syscall, Mem, String depend on def.h
 #include "syscall.c"
+// String, Mem depend on syscall.c
 #include "mem.c"
-// String depends on def.h, syscall.c, mem.c
+// String mem.c
 #include "string.c"
 
 // Netcat utility
@@ -136,11 +138,79 @@ void hexDump(void *mem, u64 size) {
 	writeString(appendString(&str, '\n'), 1);
 }
 
+// Implement example IntHeap with heap.c
+
+// String serves as IntHeap
+typedef struct {
+	int array[10];
+	int size;
+} IntHeap;
+
+void swapIntHeap(void *h, int i, int j) {
+	IntHeap *heap = (IntHeap *) h;
+	int b = heap->array[i];
+	heap->array[i] = heap->array[j];
+	heap->array[j] = b;
+}
+
+int lenIntHeap(void *h) {
+	IntHeap *heap = (IntHeap *) h;
+	return heap->size;
+}
+
+bool lessIntHeap(void *h, int i, int j) {
+	IntHeap *heap = (IntHeap *) h;
+	return heap->array[i] < heap->array[j];
+}
+
+void pushIntHeap(void *h, void *x) {
+	IntHeap *heap = (IntHeap *) h;
+	heap->array[heap->size] = (int) (u64) x;
+	heap->size++;
+}
+
+void *popIntHeap(void *h) {
+	IntHeap *heap = (IntHeap *) h;
+	heap->size--;
+	return (void *) (u64) heap->array[heap->size];
+}
+
+void asHeapIntHeap(IntHeap *ch, Heap *h) {
+	// Fill in Heap interface
+	*h = (Heap){
+		.heap = ch,
+		.i = (Heapable){
+			.sort = (Sortable){
+				.len  = lenIntHeap,
+				.less = lessIntHeap,
+				.swap = swapIntHeap
+			},
+			.pop  = popIntHeap,
+			.push = pushIntHeap
+		}
+	};
+}
+
 void _start() {
-	Sock sock;
-	SockAddrv4 sockAddr;
-	makeSock(&sock, kSockDomainIPv4, kSockTypeStream);
-	makeSockAddrv4(&sockAddr, 16);
-	hexDump(&sockAddr, sizeof(sockAddr));
+	IntHeap ch = {
+		.array = {1, 5, 2, 8},
+		.size  = 4
+	};
+	Heap h;
+	asHeapIntHeap(&ch, &h);
+
+	initHeap(&h);
+	pushHeap(&h, (void *) (u64) 7);
+
+	while (lenIntHeap(&ch) > 0) {
+		char tst[] = "x\n";
+		tst[0] = '0' + (int) (u64) popHeap(&h);
+		writeString(&(string){
+			.buf  = tst,
+			.size = sizeof tst,
+			.len  = 2
+		}, 1);
+	}
+
 	syscall(kSyscallExit, (u64[]){1, 0, 0, 0, 0, 0});
 }

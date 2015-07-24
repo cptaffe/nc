@@ -23,6 +23,7 @@ static int _syscall(int call, u64 p[const static 6]) {
 typedef enum {
 	kSyscallRead    = 0,
 	kSyscallWrite   = 1,
+	kSyscallMmap    = 9,
 	kSyscallSocket  = 41,
 	kSyscallConnect = 42,
 	kSyscallFork    = 57,

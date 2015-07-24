@@ -32,13 +32,23 @@ static bool _stringOk(string *str) {
 }
 
 // Appends a character to a string if there is room.
-string *appendString(string *str, char toAppend) {
+string *pushString(string *str, char x) {
 	if (!_stringOk(str)) return nil;
 	if (str->len < str->size) {
-		str->buf[str->len] = toAppend;
+		str->buf[str->len] = x;
 		str->len++;
 	}
 	return str;
+}
+
+int popString(string *str) {
+	if (!_stringOk(str)) return -1;
+	str->len--;
+	return str->buf[str->len];
+}
+
+string *appendString(string *str, char toAppend) {
+	return pushString(str, toAppend);
 }
 
 inline u64 lenString(string *str) {
