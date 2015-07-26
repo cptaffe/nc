@@ -14,7 +14,23 @@ typedef struct {
 	u64 len;
 } string;
 
+// emptyString, empty string constant
+extern const string emptyString;
+
 const string emptyString = {.size = 0};
+
+// string utility methods
+bool isEmptyString(string str);
+string newString(char buf[], u64 size);
+string pushString(string str, char x);
+int popString(string str);
+string appendString(string str, char toAppend);
+string subString(string str, u64 start, u64 end);
+string reverseString(string str);
+string numAsString(string str, u64 num, int base);
+string clearString(string str);
+string writeString(string str, int fd);
+string fromNullTermString(char *str);
 
 bool isEmptyString(string str) {
 	return str.size == 0;
@@ -79,8 +95,8 @@ string numAsString(string str, u64 num, int base) {
 	u64 oldlen = str.len;
 
 	while (num != 0 && !isEmptyString(str)) {
-		str = appendString(str, digits[num % base]);
-		num /= base;
+		str = appendString(str, digits[num % (u64) base]);
+		num /= (u64) base;
 	}
 
 	// Reverse the substring written to.
@@ -97,13 +113,13 @@ string clearString(string str) {
 string writeString(string str, int fd) {
 	if (!_stringOk(str)) return emptyString;
 	if (str.len > 0) {
-		syscall(kSyscallWrite, (u64[]){fd, (u64) str.buf, str.len, 0, 0, 0});
+		syscall(kSyscallWrite, (u64[]){(u64) fd, (u64) str.buf, str.len, 0, 0, 0});
 	}
 	return str;
 }
 
 string fromNullTermString(char *str) {
-	int i;
+	u64 i;
 	for (i = 0; str[i] != '\0'; i++) {}
 	return (string){
 		.buf  = str,

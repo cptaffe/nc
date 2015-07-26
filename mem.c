@@ -1,9 +1,28 @@
 // Memory utility methods.
 // depends on def.h
 
-// Switches endianness.
-// To and from network byte order.
-void upendMem(void *mem, u64 size) {
+// Mem contants
+enum {
+	pageSize = 0x1000
+};
+
+// Mem utility functions
+
+/* upendMem
+ * switches endiannes,
+ * useful for going to/from network byte order
+ * or for reversing strings.
+ */
+void upendMem(void *mem, size_t size);
+
+/* zeroMem
+ * simple zeroing method
+ * uses quadword integer math to zero memory
+ */
+void zeroMem(void *mem, size_t size);
+
+
+void upendMem(void *mem, size_t size) {
 	if (size <= 0) return;
 	u8 *mem8 = (u8*) mem;
 	u64 i = 0, j = size-1;
@@ -14,57 +33,104 @@ void upendMem(void *mem, u64 size) {
 	}
 }
 
-// naive zeroing method
-void zeroMem(void *mem, u64 size) {
-	u8 *mem8 = (u8*) mem;
-	u64 i;
+// defined for linking, introduced by compiler.
+void *memset(void *ptr, int value, size_t size) {
+	u8 *mem = (u8*) ptr;
+	size_t i;
 	for (i = 0; i < size; i++) {
-		mem8[i] = 0;
+		mem[i] = (u8) value;
 	}
+	return ptr;
 }
 
-typedef struct _MemChunk {
-	void *mem;
-	u64 size;
-	struct _MemChunk *next;
-	struct _MemChunk *prev;
-} MemChunk;
+void *memcpy(void *dest, const void *src, size_t n) {
+	const u8 *mem = (u8*) src;
+	u8 *mem2 = (u8*) dest;
+	size_t i;
+	for (i = 0; i < n; i++) {
+		mem2[i] = mem[i];
+	}
+	return dest;
+}
 
-typedef struct {
-	MemChunk *chunks;
-	MemChunk *end;
-	int len;
-	int pages; // number of allocated pages
-} MemChunkHeap;
+void zeroMem(void *mem, size_t size) {
+	memset(mem, 0, size);
+}
 
-MemChunkHeap _freeMemChunkHeap;
-MemChunkHeap _allocatedMemChunkHeap;
+/* MMap sycall wrapper code
+ * Used by Mem to map pages of memory.
+ */
 
-typedef enum {
+enum {
 	kMMapProtNone,
 	kMMapProtRead   = 1 << 0,
 	kMMapProtWrite  = 1 << 1,
 	kMMapProtExec   = 1 << 2,
 	kMMapProtAtomic = 1 << 4,
-} MMapProt;
 
-typedef enum {
 	kMMapFlagsShared  = 1 << 0,
 	kMMapFlagsPrivate = 1 << 1,
 	// Many flags omitted
 	kMMapFlagsAnon    = 0x20
-} MMapFlags;
+};
 
-enum { pageSize = 0x1000 };
+/* mapMem
+ * wraps an mmap syscall
+ * used to map memory pages
+ */
+void *mapMem(void *addr, u64 len, u64 prot, u64 flags,
+	int fd, u64 offset);
 
-void *mapMem(void *addr, u64 len, MMapProt prot, MMapFlags flags,
+/* unmapMem
+ * wraps an munmap syscall
+ * used to unmap memory pages
+ */
+int unmapMem(void *addr, u64 len);
+
+void *mapMem(void *addr, u64 len, u64 prot, u64 flags,
 	int fd, u64 offset) {
-	return (void *) syscall(kSyscallMMap, (u64[6]){(u64) addr, len, prot, flags, fd, offset});
+	return (void *) (uintptr_t) syscall(kSyscallMMap, (u64[6]){(u64) addr, len, prot, flags, (u64) fd, offset});
 }
 
 int unmapMem(void *addr, u64 len) {
 	return (int) syscall(kSyscallMUnmap, (u64[6]){(u64) addr, len});
 }
+
+/* MemChunk
+ * doubly linked list of memory chunks
+ * kept as a header in each memory chunk allocated
+ * and thusly does not require storing a pointer
+ * to said memory.
+ */
+typedef struct _MemChunk {
+	u64 size;
+	struct _MemChunk *next;
+	struct _MemChunk *prev;
+} MemChunk;
+
+/* MemChunkHeap
+ * implements the Heapable interface
+ * stores the beginning and end pointers to
+ * the MemChunk doubly linked list for this heap.
+ */
+typedef struct {
+	MemChunk *chunks;
+	MemChunk *end;
+	int len;
+} MemChunkHeap;
+
+/* free and allocated MemChunkHeap
+ * global heaps for the storage of free
+ * and allocated chunks, respectively.
+ */
+static MemChunkHeap _freeMemChunkHeap;
+static MemChunkHeap _allocatedMemChunkHeap;
+
+/* getMemChunk
+ * follows linked list h->chunks n jumps,
+ * returning the node it lands on.
+ */
+MemChunk *getMemChunk(MemChunkHeap *h, int n);
 
 MemChunk *getMemChunk(MemChunkHeap *h, int n) {
 	MemChunk *chunk = h->chunks;
@@ -74,6 +140,17 @@ MemChunk *getMemChunk(MemChunkHeap *h, int n) {
 	}
 	return chunk;
 }
+
+/* MemChunkHeap implements Heapable
+ * asHeapMemChunkHeap returns a Heap object
+ * created from fulfilling the interface.
+ */
+void swapMemChunkHeap(void *v, int i, int j);
+int lenMemChunkHeap(void *v);
+bool lessMemChunkHeap(void *v, int i, int j);
+void pushMemChunkHeap(void *v, void *x);
+void *popMemChunkHeap(void *v);
+Heap asHeapMemChunkHeap(MemChunkHeap *h);
 
 void swapMemChunkHeap(void *v, int i, int j) {
 	MemChunkHeap *h = ((MemChunkHeap *) v);
@@ -142,10 +219,19 @@ Heap asHeapMemChunkHeap(MemChunkHeap *h) {
 	};
 }
 
+/* MemChunkAddrHeap implements Heapable
+ * asHeapMemChunkAddrHeap returns a Heap object
+ * by piggybacking off MemChunkHeap but substituting
+ * its own less method to order by memory address,
+ * which is used for finding contiguous chunks.
+ */
+bool lessMemChunkAddrHeap(void *v, int i, int j);
+Heap asHeapMemChunkAddrHeap(MemChunkHeap *h);
+
 // Order heap by address
 bool lessMemChunkAddrHeap(void *v, int i, int j) {
 	MemChunkHeap *h = ((MemChunkHeap *) v);
-	return getMemChunk(h, i)->mem < getMemChunk(h, j)->mem;
+	return getMemChunk(h, i) < getMemChunk(h, j);
 }
 
 Heap asHeapMemChunkAddrHeap(MemChunkHeap *h) {
@@ -155,23 +241,63 @@ Heap asHeapMemChunkAddrHeap(MemChunkHeap *h) {
 	return oh;
 }
 
-MemChunk *allocMemChunk(int pages) {
-	void *mem = mapMem(nil, pages * pageSize,
+/* contignifyMemChunkHeap
+ * finds contiguous chunks and combines them into larger
+ * chunks. This function is routinely run on the
+ * global free heap.
+ */
+void contignifyMemChunkHeap(Heap *fh);
+
+// Combine contiguous chunks in free heap
+void contignifyMemChunkHeap(Heap *fh) {
+	MemChunkHeap chunk = {};
+	Heap lh = asHeapMemChunkAddrHeap(&chunk);
+
+	// Heapify by memory address with MemChunkAddrHeap
+	while (lenMemChunkHeap(fh->heap) > 0) {
+		pushHeap(&lh, popHeap(fh));
+	}
+
+	// Sift through looking for directly contiguous
+	// chunks. Create larger chunks when found.
+	MemChunk *last = nil, *m;
+	while (lenMemChunkHeap(lh.heap) > 0) {
+		m = (MemChunk*) popHeap(&lh);
+		if (last != nil) {
+			// Organized by smallest address
+			if (((MemChunk *)&((u64*) last)[last->size / sizeof(u64)]) == m) {
+				last->size += m->size;
+			} else pushHeap(fh, last);
+		}
+		last = m;
+	}
+	pushHeap(fh, &last);
+}
+
+// Allocates n pages as a chunk
+static MemChunk *_allocMemChunk(int pages) {
+	void *mem = mapMem(nil, (u64) (pages * pageSize),
 		kMMapProtRead | kMMapProtWrite,
 		kMMapFlagsPrivate | kMMapFlagsAnon,
 		-1, 0);
-	mem = syscallError((u64) mem) ? nil : mem;
+	mem = syscallError((i64) mem) ? nil : mem;
 	if (mem == nil) return nil;
 	MemChunk *m = (MemChunk *) mem;
 	*m = (MemChunk) {
-		.mem  = mem,
-		.size = pages * pageSize
+		.size = (u64) (pages * pageSize)
 	};
 	return m;
 }
 
+/* findMemChunk
+ * takes a heap (ordered by minimum size)
+ * and a minimum size, returns the smallest chunk larger
+ * than the requested size, or nil.
+ */
+MemChunk *findMemChunk(Heap *fh, u64 size);
+
 MemChunk *findMemChunk(Heap *fh, u64 size) {
-	MemChunkHeap heap = {0};
+	MemChunkHeap heap = {};
 	Heap lh = asHeapMemChunkHeap(&heap);
 	MemChunk *m = nil;
 	// Sift through heap to find appropriate sized chunk
@@ -194,36 +320,6 @@ MemChunk *findMemChunk(Heap *fh, u64 size) {
 	return nil;
 }
 
-// Combine contiguous chunks in free heap
-void contignifyMemChunkHeap(Heap *fh) {
-	MemChunkHeap chunk = {0};
-	Heap lh = asHeapMemChunkAddrHeap(&chunk);
-
-	// Heapify by memory address with MemChunkAddrHeap
-	while (lenMemChunkHeap(fh->heap) > 0) {
-		pushHeap(&lh, popHeap(fh));
-	}
-
-	// Sift through looking for directly contiguous
-	// chunks. Create larger chunks when found.
-	MemChunk *last = nil, *m;
-	while (lenMemChunkHeap(lh.heap) > 0) {
-		m = (MemChunk*) popHeap(&lh);
-		if (last != nil) {
-			// Organized by smallest address
-			if (&((u8*) last->mem)[last->size] == m->mem) {
-				m = (MemChunk *) last->mem;
-				*m = (MemChunk) {
-					.mem  = m,
-					.size = last->size + m->size
-				};
-			} else pushHeap(fh, last);
-		}
-		last = m;
-	}
-	pushHeap(fh, &last);
-}
-
 static u64 _align(u64 n, u64 alignment) {
 	u64 r = n % alignment;
 	if (r == 0) {
@@ -237,18 +333,25 @@ static u64 _headerSize() {
 	return _align(sizeof(MemChunk), sizeof(u64));
 }
 
+/* malloc and free
+ * memory allocation and freeing methods.
+ * all memory returned from malloc is zeroed.
+ */
+void free(void *mem);
+void *malloc(size_t size);
+
 void free(void *mem) {
 	if (mem == nil) return;
 	Heap fh = asHeapMemChunkHeap(&_freeMemChunkHeap);
 	Heap ah = asHeapMemChunkHeap(&_allocatedMemChunkHeap);
-	MemChunkHeap chunk = {0};
+	MemChunkHeap chunk = {};
 	Heap lh = asHeapMemChunkHeap(&chunk);
 	// Sift through heap to find appropriate address
 	// Save chunks on local heap.
 	MemChunk *m;
 	while (lenMemChunkHeap(ah.heap) > 0) {
 		m = (MemChunk *) popHeap(&ah);
-		if (&((u8*)m->mem)[-_headerSize()] == mem) {
+		if (&((u8*)m)[-_headerSize()] == mem) {
 			pushHeap(&fh, m);
 			break;
 		}
@@ -264,7 +367,7 @@ void free(void *mem) {
 	contignifyMemChunkHeap(&fh);
 }
 
-void *malloc(u32 size) {
+void *malloc(size_t size) {
 	if (size == 0) return nil;
 	// Keep quadword alignment
 	u64 usize = _align(size, sizeof(u64));
@@ -275,10 +378,10 @@ void *malloc(u32 size) {
 	MemChunk *am;
 	if (!(am = findMemChunk(&fh, size))) {
 		// Allocate enough pages in one chunk
-		int pages = size / pageSize;
+		int pages = (int) (size / pageSize);
 		if (size % pageSize > 0) pages++;
-		am = allocMemChunk(pages);
-		if (am->mem == nil) return nil; // failed mmap
+		am = _allocMemChunk(pages);
+		if (am == nil) return nil; // failed mmap
 	}
 	// Break off extra memory into another free chunk
 	// only if there is enough extra space to allocate
@@ -286,9 +389,8 @@ void *malloc(u32 size) {
 	// chunk struct.
 	if ((am->size - size) > (msize + sizeof(u64))) {
 		// Store MemChunk header in upper extra memory.
-		MemChunk *fm = (MemChunk*) &((u8*)am->mem)[size];
+		MemChunk *fm = (MemChunk*) &((u64*)am)[size / sizeof(u64)];
 		*fm = (MemChunk) {
-			.mem  = fm,
 			.size = am->size - size
 		};
 		pushHeap(&fh, &fm);
@@ -297,7 +399,7 @@ void *malloc(u32 size) {
 	pushHeap(&ah, am);
 	// User only sees memory allocated for user
 	// zero memory for security
-	void *v = &((u8*) am->mem)[msize];
+	void *v = &((u8*) am)[msize];
 	zeroMem(v, usize);
 	return v;
 }

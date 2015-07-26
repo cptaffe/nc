@@ -22,6 +22,7 @@ static u64 _syscall(int call, u64 p[const static 6]) {
 	 return ret;
 }
 
+// Syscall ids
 typedef enum {
 	kSyscallRead     = 0,
 	kSyscallWrite    = 1,
@@ -34,9 +35,13 @@ typedef enum {
 	kSyscallExit     = 60
 } SystemCall;
 
+// Syscall methods
+int syscallError(i64 n);
+u64 syscall(SystemCall syscall, u64 argv[const static 6]);
+
 // Returns errno value
 int syscallError(i64 n) {
-	if (n > -0x1000 && n < 0) return -n;
+	if (n > -0x1000 && n < 0) return (int) -n;
 	return 0;
 }
 

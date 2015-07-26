@@ -7,6 +7,7 @@ fi
 
 BIN="nc"
 SRC="nc.c"
-FLAGS="-nostdlib -g -std=gnu99 -Wall -Wpedantic"
+FLAGS="-nostdlib -g --std=c99 -Weverything -Werror \
+-Wno-non-literal-null-conversion -Wno-gnu-empty-initializer -Wno-padded"
 
 ${CC} ${FLAGS} ${SRC} -o ${BIN}

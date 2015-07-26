@@ -21,6 +21,13 @@ typedef struct {
 	Heapable i;
 } Heap;
 
+// Heap methods
+void initHeap(Heap *h);
+void pushHeap(Heap *h, void *x);
+void *popHeap(Heap *h);
+void *removeHeap(Heap *h, int i);
+void fixHeap(Heap *h, int i);
+
 static void _upHeap(Heap *h, int j) {
 	for (;;) {
 		int i = (j - 1) / 2; // parent

@@ -8,10 +8,11 @@
 // String mem.c
 #include "string.c"
 
-// Netcat utility
-// Written with no standard library,
-// for Linux only.
-// Hopefully also a cleaner nc implementation
+/* Netcat utility
+ * written with no standard library,
+ * for Linux only.
+ * hopefully also a cleaner nc implementation
+ */
 
 typedef struct {
 	int fd;
@@ -72,6 +73,14 @@ typedef struct {
 	u32 scopeId;
 } SockAddrv6;
 
+/* Socket utility methods
+ *
+ */
+void makeSockAddrv4(SockAddrv4 *sockAddr, u16 port);
+void makeSockAddrv6(SockAddrv6 *sockAddr);
+void makeSock(Sock *sock, SockDomain domain, SockType type);
+Sock *connectSock(Sock *sock, SockAddr *addr, u64 len);
+
 void makeSockAddrv4(SockAddrv4 *sockAddr, u16 port) {
 	// port is in network order
 	upendMem(&port, sizeof(port));
@@ -90,36 +99,19 @@ void makeSockAddrv6(SockAddrv6 *sockAddr) {
 // Assumes there is only one protocol for each, namely 0
 void makeSock(Sock *sock, SockDomain domain, SockType type) {
 	zeroMem(sock, sizeof(sock));
-	sock->fd = syscall(kSyscallSocket, (u64[]){(u64) domain, (u64) type, 0, 0, 0, 0});
+	sock->fd = (int) syscall(kSyscallSocket, (u64[]){(u64) domain, (u64) type, 0, 0, 0, 0});
 }
 
-// Sanity check
-static bool _sockOk(Sock *sock) {
-	return sock->fd != nil;
-}
+/* hexDump
+ * utility hex dump function.
+ * prints quadwords in hex separated by a dot;
+ * if less than a quadword exists or it is not aligned.
+ */
+void hexDump(void *mem, u64 size);
 
-Sock *connectSock(Sock *sock, SockAddr *addr, u64 len) {
-	if (!_sockOk(sock)) return nil;
-	int err = syscall(sock->fd, (u64[]){(u64) addr, len, 0, 0, 0, 0});
-	if (err != 0) return nil;
-	return sock;
-}
-
-void printNum(u64 num, int base) {
-	char buf[256];
-	// If buffer is too short, memBitString returns nil
-	writeString(numAsString((string){
-		.buf  = buf,
-		.size = sizeof buf,
-	}, num, base), 1);
-}
-
-// Utility hex dump function.
-// Prints quadwords in hex separated by a dot
-// If less than a quadword exists or it is not aligned.
 void hexDump(void *mem, u64 size) {
-	int bytes = size % sizeof(u64);
-	int big = size / sizeof(u64);
+	uint bytes = (uint) (size % sizeof(u64));
+	u64 big = size / sizeof(u64);
 
 	char buf[0x1000];
 	string str = {
@@ -127,7 +119,7 @@ void hexDump(void *mem, u64 size) {
 		.size = sizeof buf,
 	};
 
-	int i;
+	u64 i;
 	for (i = 0; i < big; i++) {
 		str = appendString(numAsString(str, ((u64*)mem)[i], 16), '.');
 	}
@@ -139,17 +131,12 @@ void hexDump(void *mem, u64 size) {
 	writeString(str, 1);
 }
 
-void prints(string str) {
-	writeString(str, 1);
-}
-
-void print(char *str) {
+static void print(char *str) {
 	writeString(fromNullTermString(str), 1);
 }
 
-void printd(u64 n) {
-	printNum(n, 10);
-}
+// start symbol
+void _start(void);
 
 void _start() {
 	print("free mem:      ");
