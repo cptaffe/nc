@@ -101,3 +101,13 @@ string writeString(string str, int fd) {
 	}
 	return str;
 }
+
+string fromNullTermString(char *str) {
+	int i;
+	for (i = 0; str[i] != '\0'; i++) {}
+	return (string){
+		.buf  = str,
+		.size = i + 1,
+		.len  = i
+	};
+}

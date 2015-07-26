@@ -107,10 +107,10 @@ Sock *connectSock(Sock *sock, SockAddr *addr, u64 len) {
 void printNum(u64 num, int base) {
 	char buf[256];
 	// If buffer is too short, memBitString returns nil
-	writeString(appendString(numAsString((string){
+	writeString(numAsString((string){
 		.buf  = buf,
 		.size = sizeof buf,
-	}, num, base), '\n'), 1);
+	}, num, base), 1);
 }
 
 // Utility hex dump function.
@@ -128,79 +128,59 @@ void hexDump(void *mem, u64 size) {
 
 	int i;
 	for (i = 0; i < big; i++) {
-		appendString(numAsString(str, ((u64*)mem)[i], 16), '.');
+		str = appendString(numAsString(str, ((u64*)mem)[i], 16), '.');
 	}
 
 	for (i = 0; i < bytes; i++) {
-		numAsString(str, ((u8*)&((u64*)mem)[big])[i], 16);
+		str = numAsString(str, ((u8*)&((u64*)mem)[big])[i], 16);
 	}
 
-	writeString(appendString(str, '\n'), 1);
+	writeString(str, 1);
 }
 
-// Implement example IntHeap with heap.c
-
-// String serves as IntHeap
-typedef struct {
-	int array[10];
-	int size;
-} IntHeap;
-
-void swapIntHeap(void *v, int i, int j) {
-	IntHeap *h = ((IntHeap *) v);
-	int b = h->array[i];
-	h->array[i] = h->array[j];
-	h->array[j] = b;
+void prints(string str) {
+	writeString(str, 1);
 }
 
-int lenIntHeap(void *v) {
-	return ((IntHeap *) v)->size;
+void print(char *str) {
+	writeString(fromNullTermString(str), 1);
 }
 
-bool lessIntHeap(void *v, int i, int j) {
-	IntHeap *h = ((IntHeap *) v);
-	return h->array[i] < h->array[j];
-}
-
-void pushIntHeap(void *v, void *x) {
-	IntHeap *h = ((IntHeap *) v);
-	h->array[h->size] = (int) (u64) x;
-	h->size++;
-}
-
-void *popIntHeap(void *v) {
-	IntHeap *h = ((IntHeap *) v);
-	h->size--;
-	return (void *) (u64) h->array[h->size];
-}
-
-Heap asHeapIntHeap(IntHeap h) {
-	// Fill in Heap interface
-	return (Heap){
-		.heap = &h,
-		.i = (Heapable){
-			.sort = (Sortable){
-				.len  = lenIntHeap,
-				.less = lessIntHeap,
-				.swap = swapIntHeap
-			},
-			.pop  = popIntHeap,
-			.push = pushIntHeap
-		}
-	};
+void printd(u64 n) {
+	printNum(n, 10);
 }
 
 void _start() {
-	Heap h = asHeapIntHeap((IntHeap){
-		.array = {1, 5, 2, 8},
-		.size  = 4
-	});
-	initHeap(&h);
-	pushHeap(&h, (void *) (u64) 7);
+	print("free mem:      ");
+	hexDump(&_freeMemChunkHeap, sizeof(_freeMemChunkHeap));
+	print("\nallocated mem: ");
+	hexDump(&_allocatedMemChunkHeap, sizeof(_allocatedMemChunkHeap));
+	print("\n");
 
-	while (lenIntHeap(h.heap) > 0) {
-		printNum((int) (u64) popHeap(&h), 10);
+
+	int *arr[10];
+
+	int i;
+	for (i = 0; i < 10; i++) {
+		arr[i] = malloc(10 * 0x1000);
+		hexDump(&arr[i], sizeof(int *)); print("\n");
 	}
+
+	print("free mem:      ");
+	hexDump(&_freeMemChunkHeap, sizeof(_freeMemChunkHeap));
+	print("\nallocated mem: ");
+	hexDump(&_allocatedMemChunkHeap, sizeof(_allocatedMemChunkHeap));
+	print("\n");
+
+	for (i = 0; i < 10; i++) {
+		free(arr[i]);
+	}
+
+	print("free mem:      ");
+	hexDump(&_freeMemChunkHeap, sizeof(_freeMemChunkHeap));
+	print("\nallocated mem: ");
+	hexDump(&_allocatedMemChunkHeap, sizeof(_allocatedMemChunkHeap));
+	print("\n");
 
 	syscall(kSyscallExit, (u64[]){1, 0, 0, 0, 0, 0});
 }
