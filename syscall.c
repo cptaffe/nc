@@ -4,8 +4,8 @@
 
 // System V ABI Section A.2.1
 static u64 _syscall(int call, u64 p[const static 6]) {
-	 u64 ret;
-	 asm(
+	u64 ret;
+	__asm__(
 			// work around for lack of constraints for
 			// r8, r9, and r10
 			"movq %[p3], %%r10\n"

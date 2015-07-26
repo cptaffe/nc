@@ -2,10 +2,11 @@
 
 # compiler is overridable
 if test -z ${CC}; then
-	CC="cc"
+	CC="clang"
 fi
 
 BIN="nc"
 SRC="nc.c"
+FLAGS="-nostdlib -g -std=gnu99 -Wall -Wpedantic"
 
-${CC} -nostdlib ${SRC} -o ${BIN}
+${CC} ${FLAGS} ${SRC} -o ${BIN}

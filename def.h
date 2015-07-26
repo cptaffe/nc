@@ -1,7 +1,7 @@
 // Simple declarations
 
-enum {nil};
-typedef enum {false, true} bool;
+enum { nil };
+typedef enum { false, true } bool;
 
 typedef unsigned int uint;
 typedef signed char i8;

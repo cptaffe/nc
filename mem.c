@@ -23,13 +23,16 @@ void zeroMem(void *mem, u64 size) {
 	}
 }
 
-typedef struct {
+typedef struct _MemChunk {
 	void *mem;
 	u64 size;
+	struct _MemChunk *next;
+	struct _MemChunk *prev;
 } MemChunk;
 
 typedef struct {
-	MemChunk chunks[100];
+	MemChunk *chunks;
+	MemChunk *end;
 	int len;
 	int pages; // number of allocated pages
 } MemChunkHeap;
@@ -63,11 +66,30 @@ int unmapMem(void *addr, u64 len) {
 	return (int) syscall(kSyscallMUnmap, (u64[6]){(u64) addr, len});
 }
 
+MemChunk *getMemChunk(MemChunkHeap *h, int n) {
+	MemChunk *chunk = h->chunks;
+	int i;
+	for (i = 0; i < n; i++) {
+		chunk = chunk->next;
+	}
+	return chunk;
+}
+
 void swapMemChunkHeap(void *v, int i, int j) {
 	MemChunkHeap *h = ((MemChunkHeap *) v);
-	MemChunk b = h->chunks[i];
-	h->chunks[i] = h->chunks[j];
-	h->chunks[j] = b;
+	MemChunk *a = getMemChunk(h, i);
+	MemChunk *b = getMemChunk(h, j);
+	if (a == b) return;
+	MemChunk *n = b->next;
+	MemChunk *p = b->prev;
+	b->next = a->next;
+	b->prev = a->prev;
+	if (b->prev != nil) b->prev->next = b;
+	if (b->next != nil) b->next->prev = b;
+	a->next = n;
+	a->prev = p;
+	if (a->prev != nil) a->prev->next = a;
+	if (a->next != nil) a->next->prev = a;
 }
 
 int lenMemChunkHeap(void *v) {
@@ -76,19 +98,32 @@ int lenMemChunkHeap(void *v) {
 
 bool lessMemChunkHeap(void *v, int i, int j) {
 	MemChunkHeap *h = ((MemChunkHeap *) v);
-	return h->chunks[i].size < h->chunks[j].size;
+	return getMemChunk(h, i)->size < getMemChunk(h, j)->size;
 }
 
 void pushMemChunkHeap(void *v, void *x) {
 	MemChunkHeap *h = ((MemChunkHeap *) v);
-	h->chunks[h->len] = *((MemChunk *) x);
+	MemChunk *y = (MemChunk *) x;
+	y->prev = h->end;
+	y->next = nil;
+	if (h->end == nil) {
+		h->end = y;
+		h->chunks = h->end; // setup head as well.
+	} else {
+		h->end->next = y;
+		h->end = h->end->next;
+	}
 	h->len++;
 }
 
 void *popMemChunkHeap(void *v) {
 	MemChunkHeap *h = ((MemChunkHeap *) v);
+	MemChunk *x = h->end;
+	x->next = x->prev = nil;
+	h->end->prev->next = nil;
+	h->end = h->end->prev;
 	h->len--;
-	return &h->chunks[h->len];
+	return x;
 }
 
 Heap asHeapMemChunkHeap(MemChunkHeap *h) {
@@ -110,61 +145,43 @@ Heap asHeapMemChunkHeap(MemChunkHeap *h) {
 // Order heap by address
 bool lessMemChunkAddrHeap(void *v, int i, int j) {
 	MemChunkHeap *h = ((MemChunkHeap *) v);
-	return h->chunks[i].mem < h->chunks[j].mem;
+	return getMemChunk(h, i)->mem < getMemChunk(h, j)->mem;
 }
 
 Heap asHeapMemChunkAddrHeap(MemChunkHeap *h) {
 	// Fill in Heap interface
-	return (Heap){
-		.heap = h,
-		.i = (Heapable){
-			.sort = (Sortable){
-				.len  = lenMemChunkHeap,
-				.less = lessMemChunkAddrHeap,
-				.swap = swapMemChunkHeap
-			},
-			.pop  = popMemChunkHeap,
-			.push = pushMemChunkHeap
-		}
-	};
+	Heap oh = asHeapMemChunkHeap(h);
+	oh.i.sort.less = lessMemChunkAddrHeap;
+	return oh;
 }
 
-MemChunk allocMemChunk(int pages) {
+MemChunk *allocMemChunk(int pages) {
 	void *mem = mapMem(nil, pages * pageSize,
 		kMMapProtRead | kMMapProtWrite,
 		kMMapFlagsPrivate | kMMapFlagsAnon,
 		-1, 0);
-	MemChunk m = {
-		.mem = syscallError((u64) mem) ? nil : mem,
+	mem = syscallError((u64) mem) ? nil : mem;
+	if (mem == nil) return nil;
+	MemChunk *m = (MemChunk *) mem;
+	*m = (MemChunk) {
+		.mem  = mem,
 		.size = pages * pageSize
 	};
 	return m;
 }
 
-MemChunk deallocMemChunk(MemChunk chunk) {
-	// not a page aligned address
-	if (((u64) chunk.mem) != ((u64) chunk.mem) % pageSize) return chunk;
-	// largest number of pages that can be unmapped
-	int pages = chunk.size / pageSize;
-	if (pages == 0) return chunk; // not large enough
-	unmapMem(chunk.mem, pages * pageSize);
-	return (MemChunk) {
-		.mem  = &((u8*) chunk.mem)[pages * pageSize],
-		.size = chunk.size - (pages * pageSize)
-	};
-}
-
-bool findMemChunk(Heap *fh, MemChunk *m, u64 size) {
-	MemChunkHeap chunk = {0};
-	Heap lh = asHeapMemChunkHeap(&chunk);
+MemChunk *findMemChunk(Heap *fh, u64 size) {
+	MemChunkHeap heap = {0};
+	Heap lh = asHeapMemChunkHeap(&heap);
+	MemChunk *m = nil;
 	// Sift through heap to find appropriate sized chunk
 	// Save chunks on local heap.
 	while (lenMemChunkHeap(fh->heap) > 0) {
-		*m = *((MemChunk *) popHeap(fh));
+		m = (MemChunk *) popHeap(fh);
 		if (m->size >= size) {
 			break;
 		}
-		pushHeap(&lh, &m);
+		pushHeap(&lh, m);
 	}
 
 	// Repush chunks from local heap
@@ -173,8 +190,8 @@ bool findMemChunk(Heap *fh, MemChunk *m, u64 size) {
 	}
 
 	// Have found chunk?
-	if (m->size >= size) return true;
-	return false;
+	if (m != nil && m->size >= size) return m;
+	return nil;
 }
 
 // Combine contiguous chunks in free heap
@@ -189,21 +206,35 @@ void contignifyMemChunkHeap(Heap *fh) {
 
 	// Sift through looking for directly contiguous
 	// chunks. Create larger chunks when found.
-	MemChunk last = {0}, m = {0};
+	MemChunk *last = nil, *m;
 	while (lenMemChunkHeap(lh.heap) > 0) {
-		m = *((MemChunk*) popHeap(&lh));
-		if (last.size > 0) {
+		m = (MemChunk*) popHeap(&lh);
+		if (last != nil) {
 			// Organized by smallest address
-			if (&((u8*) last.mem)[last.size] == m.mem) {
-				m = (MemChunk) {
-					.mem  = last.mem,
-					.size = last.size + m.size
+			if (&((u8*) last->mem)[last->size] == m->mem) {
+				m = (MemChunk *) last->mem;
+				*m = (MemChunk) {
+					.mem  = m,
+					.size = last->size + m->size
 				};
-			} else pushHeap(fh, &last);
+			} else pushHeap(fh, last);
 		}
 		last = m;
 	}
 	pushHeap(fh, &last);
+}
+
+static u64 _align(u64 n, u64 alignment) {
+	u64 r = n % alignment;
+	if (r == 0) {
+		return n;
+	} else {
+		return (n - r) + alignment;
+	}
+}
+
+static u64 _headerSize() {
+	return _align(sizeof(MemChunk), sizeof(u64));
 }
 
 void free(void *mem) {
@@ -214,14 +245,14 @@ void free(void *mem) {
 	Heap lh = asHeapMemChunkHeap(&chunk);
 	// Sift through heap to find appropriate address
 	// Save chunks on local heap.
-	MemChunk m = {0};
+	MemChunk *m;
 	while (lenMemChunkHeap(ah.heap) > 0) {
-		m = *((MemChunk *) popHeap(&ah));
-		if (m.mem == mem) {
-			pushHeap(&fh, &m);
+		m = (MemChunk *) popHeap(&ah);
+		if (&((u8*)m->mem)[-_headerSize()] == mem) {
+			pushHeap(&fh, m);
 			break;
 		}
-		pushHeap(&lh, &m);
+		pushHeap(&lh, m);
 	}
 
 	// Repush chunks from local heap
@@ -233,33 +264,40 @@ void free(void *mem) {
 	contignifyMemChunkHeap(&fh);
 }
 
-static u64 _align(u64 n, u64 alignment) {
-	return (n - (n % alignment)) + ((n % alignment) ? alignment : 0);
-}
-
-void *malloc(u64 size) {
+void *malloc(u32 size) {
 	if (size == 0) return nil;
 	// Keep quadword alignment
-	size = _align(size, sizeof(u64));
+	u64 usize = _align(size, sizeof(u64));
+	u64 msize = _headerSize();
+	size = usize + msize;
 	Heap fh = asHeapMemChunkHeap(&_freeMemChunkHeap);
 	Heap ah = asHeapMemChunkHeap(&_allocatedMemChunkHeap);
-	MemChunk m = {0};
-	if (!findMemChunk(&fh, &m, size)) {
+	MemChunk *am;
+	if (!(am = findMemChunk(&fh, size))) {
 		// Allocate enough pages in one chunk
 		int pages = size / pageSize;
 		if (size % pageSize > 0) pages++;
-		m = allocMemChunk(pages);
-		if (m.mem == nil) return nil; // failed mmap
+		am = allocMemChunk(pages);
+		if (am->mem == nil) return nil; // failed mmap
 	}
 	// Break off extra memory into another free chunk
-	if (m.size - size > 0) {
-		MemChunk fm = {
-			.mem  = &((u8*)m.mem)[size],
-			.size = m.size - size
+	// only if there is enough extra space to allocate
+	// another quadword aligned chunk with a header
+	// chunk struct.
+	if ((am->size - size) > (msize + sizeof(u64))) {
+		// Store MemChunk header in upper extra memory.
+		MemChunk *fm = (MemChunk*) &((u8*)am->mem)[size];
+		*fm = (MemChunk) {
+			.mem  = fm,
+			.size = am->size - size
 		};
 		pushHeap(&fh, &fm);
-		m.size = size;
+		am->size = size;
 	}
-	pushHeap(&ah, &m);
-	return m.mem;
+	pushHeap(&ah, am);
+	// User only sees memory allocated for user
+	// zero memory for security
+	void *v = &((u8*) am->mem)[msize];
+	zeroMem(v, usize);
+	return v;
 }

@@ -102,6 +102,7 @@ Sock *connectSock(Sock *sock, SockAddr *addr, u64 len) {
 	if (!_sockOk(sock)) return nil;
 	int err = syscall(sock->fd, (u64[]){(u64) addr, len, 0, 0, 0, 0});
 	if (err != 0) return nil;
+	return sock;
 }
 
 void printNum(u64 num, int base) {
