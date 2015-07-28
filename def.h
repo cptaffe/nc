@@ -1,7 +1,7 @@
 // Simple declarations
 
-enum { nil };
-typedef enum { false, true } bool;
+// nullptr c++ definition
+typedef decltype(nullptr) nullptr_t;
 
 typedef unsigned int uint;
 typedef signed char i8;

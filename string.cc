@@ -2,6 +2,9 @@
 // depends on def.h, syscall.c, mem.c
 // Defines string type and related methods.
 
+// TODO: remove mem linkage shim
+void upendMem(void *mem, size_t size);
+
 enum {
 	kStringFdIn,
 	kStringFdOut,
@@ -31,6 +34,42 @@ string numAsString(string str, u64 num, int base);
 string clearString(string str);
 string writeString(string str, int fd);
 string fromNullTermString(char *str);
+
+/* hexDump, hexDumps
+ * Utility hex dump function.
+ * prints quadwords in hex separated by a dot;
+ * if less than a quadword exists or it is not aligned.
+ */
+void hexDump(void *mem, size_t size);
+void hexDumps(char *prefix, void *mem, size_t size);
+
+void hexDumps(char *prefix, void *mem, size_t size) {
+	writeString(fromNullTermString(prefix), 1);
+	hexDump(mem, size);
+	writeString(fromNullTermString("\n"), 1);
+}
+
+void hexDump(void *mem, size_t size) {
+	uint bytes = (uint) (size % sizeof(u64));
+	size_t big = size / sizeof(u64);
+
+	char buf[0x1000];
+	string str = {
+		.buf  = buf,
+		.size = sizeof buf,
+	};
+
+	u64 i;
+	for (i = 0; i < big; i++) {
+		str = appendString(numAsString(str, ((u64*)mem)[i], 16), '.');
+	}
+
+	for (i = 0; i < bytes; i++) {
+		str = numAsString(str, ((u8*)&((u64*)mem)[big])[i], 16);
+	}
+
+	writeString(str, 1);
+}
 
 bool isEmptyString(string str) {
 	return str.size == 0;
